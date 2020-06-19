@@ -1,0 +1,2 @@
+# Codebreaker
+Mastermind solver.
