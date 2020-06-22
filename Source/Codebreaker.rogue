@@ -1,0 +1,227 @@
+#===============================================================================
+# Codebreaker.rogue
+# June 18, 2020
+#===============================================================================
+$requireRogue "1.7.4"
+
+Codebreaker()
+
+class Codebreaker
+  METHODS
+    method init
+      #play
+      solve
+
+    method play
+      local game = Game()
+      local guesses = 1
+      while (not game.is_over)
+        local guess = Console.input( guesses.format(2) + ": " )
+        if (game.is_valid_guess(guess))
+          local score = game.make_guess( guess->Int32 )
+          println "    " + score
+          ++guesses
+        else
+          println "Invalid guess"
+        endIf
+      endWhile
+
+      if (game.is_win) println "You win!"
+      else             println "Out of moves."
+
+    method solve
+      local game = Game()
+
+      local all_unused_guesses = game.permuations
+      local solution_candidates = all_unused_guesses.cloned
+      println "# solution candidate".pluralized( solution_candidates.count )
+      local next_guess = Pattern( 1122, 4 )
+
+      local guesses = 1
+      while (not game.is_over)
+        println "Guess $: $" (guesses,next_guess)
+        local score = game.make_guess( next_guess )
+        println "         " + score
+        ++guesses
+
+        if (game.is_over) escapeWhile
+
+        all_unused_guesses.remove_at( all_unused_guesses.locate($ == next_guess).value )
+
+        local candidate_i = solution_candidates.locate( $ == next_guess )
+        if (candidate_i.exists) solution_candidates.remove_at( candidate_i.value )
+
+        local old_count = solution_candidates.count
+        solution_candidates.discard( $.score_guess(next_guess) != score )
+        local new_count = solution_candidates.count
+        if (new_count < old_count)
+          println "         Removing $ possible solutions that would not give the same score for the current guess." (old_count-new_count)
+        endIf
+        println "         $." ("# possible solution remains/# possible solutions remain".pluralized(solution_candidates.count))
+
+        next_guess = find_next_best_guess( all_unused_guesses, solution_candidates )
+      endWhile
+
+      if (game.is_win) println "Game won!"
+      else             println "Out of moves."
+
+    method find_next_best_guess( all_unused_guesses:Pattern[], solution_candidates:Pattern[] )->Pattern
+      require solution_candidates.count
+      if (solution_candidates.count == 1) return solution_candidates.first
+
+      local best_guesses = Pattern[]
+      local best_score   = 0
+
+      local hit_counts = Table<<Score,Int32>>()
+      forEach (candidate in all_unused_guesses)
+        hit_counts.clear
+        local max_hits = 0
+        forEach (guess in solution_candidates)
+          local score = candidate.score_guess( guess )
+          if (hit_counts.contains(score))
+            ++hit_counts[score]
+            max_hits = max_hits.or_larger( hit_counts[score] )
+          else
+            hit_counts[score] = 1
+          endIf
+        endForEach
+
+        local score = solution_candidates.count - max_hits
+        if (score > best_score)
+          best_score = score
+          best_guesses.clear.add( candidate )
+        elseIf (score == best_score)
+          best_guesses.add( candidate )
+        endIf
+
+      endForEach
+
+      require best_guesses.count
+      forEach (candidate in best_guesses)
+        if (solution_candidates.contains(candidate)) return candidate
+      endForEach
+
+      return best_guesses.first
+endClass
+
+
+class Score( correct:Int32, partial:Int32 ) [compound]
+  METHODS
+    method hash_code->Int32
+      return (correct:<<:4) | partial
+
+    method operator==( other:Score )->Logical
+      return correct == other.correct and partial == other.partial
+
+    method to->String
+      return "$$" ("+"*correct,"-"*partial)
+endClass
+
+
+class Pattern( value:Int32, count:Int32 ) [compound]
+  GLOBAL PROPERTIES
+    this_digits  = Int32[]
+    guess_digits = Int32[]
+
+  GLOBAL METHODS
+    method create( digits:Int32[] )->Pattern
+      local value = 0
+      forEach (d in digits) value = value * 10 + d
+      return Pattern( value, digits.count )
+
+  METHODS
+    method get( index:Int32 )->Int32
+      return (value / 10^index) % 10
+
+    method score_guess( guess:Pattern )->Score
+      local complete = 0
+      local partial  = 0
+
+      guess_digits.clear
+      this_digits.clear
+      forEach (g at i in guess)
+        local s = this[i]
+        if (g == s)
+          ++complete
+        else
+          guess_digits.add( g )
+          this_digits.add( this[i] )
+        endIf
+      endForEach
+
+      forEach (g in guess_digits)
+        if (this_digits.contains(g))
+          ++partial
+          this_digits.remove( g )
+        endIf
+      endForEach
+
+      return Score(complete,partial)
+
+    method to->String
+      return value->String
+endClass
+
+class Game
+  PROPERTIES
+    code_length     : Int32
+    variants        : Int32
+    max_guesses     : Int32
+    solution        : Pattern
+    guesses         = Pattern[]
+
+  METHODS
+    method init( code_length=4, variants=6, max_guesses=12 )
+      local solution = 0
+      loop (code_length)
+        solution = solution * 10 + Random.int32(1,variants)
+      endLoop
+      this.solution = Pattern( solution, code_length )
+
+    method is_over->Logical
+      return guesses.count == max_guesses or (guesses.count and guesses.last == solution)
+
+    method is_win->Logical
+      return (guesses.count and guesses.last == solution)
+
+    method is_loss->Logical
+      return (is_over and not is_win)
+
+    method is_valid_guess( guess:String )->Logical
+      if (not guess or guess.count != code_length) return false
+
+      block guess=Pattern(guess,code_length)
+        forEach (v in guess)
+          if (v > variants or (v == 0 and variants < 10)) return false
+        endForEach
+      endBlock
+      return true
+
+    method make_guess( guess:Int32 )->Score
+      return make_guess( Pattern(guess,code_length) )
+
+    method make_guess( guess:Pattern )->Score
+      guesses.add( guess )
+      return solution.score_guess( guess )
+
+    method permuations->Pattern[]
+      return permuations( Int32[], Pattern[] )
+
+    method permuations( digits:Int32[], patterns:Pattern[] )->Pattern[]
+      if (digits.count == code_length)
+        patterns.add( Pattern(digits) )
+      else
+        forEach (d in 1..variants)
+          digits.add( d )
+          permuations( digits, patterns )
+          digits.remove_last
+        endForEach
+      endIf
+      return patterns
+
+    method set_solution( @solution )
+
+    method set_solution( value:Int32 )
+      @solution = Pattern( value, code_length )
+endClass
+
