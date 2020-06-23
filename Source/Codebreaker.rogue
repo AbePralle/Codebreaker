@@ -9,8 +9,19 @@ Codebreaker()
 class Codebreaker
   METHODS
     method init
-      #play
-      solve
+      if (System.command_line_arguments.count)
+        which (System.command_line_arguments.first.to_lowercase)
+          case "play":  play; return
+          case "solve": solve; return
+        endWhich
+      endIf
+
+    method handle_input( input:String )->Logical
+      which (input.to_lowercase)
+        case "play":  play;  return true
+        case "solve": solve; return true
+        others:       return false
+      endWhich
 
     method play
       local game = Game()
