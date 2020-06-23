@@ -9,17 +9,14 @@ Codebreaker()
 class Codebreaker
   METHODS
     method init
-      if (System.command_line_arguments.count)
-        which (System.command_line_arguments.first.to_lowercase)
-          case "play":  play; return
-          case "solve": solve; return
-        endWhich
+      if (System.command_line_arguments.is_empty or not handle_input(System.command_line_arguments.first.to_lowercase))
+        if (not handle_input(Console.input("'play' or 'solve'? "))) solve
       endIf
 
     method handle_input( input:String )->Logical
       which (input.to_lowercase)
-        case "play":  play;  return true
-        case "solve": solve; return true
+        case "play", "p":  play;  return true
+        case "solve", "s": solve; return true
         others:       return false
       endWhich
 

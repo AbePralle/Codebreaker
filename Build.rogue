@@ -56,6 +56,16 @@ routine rogo_build
   endBlock
 endRoutine
 
+routine rogo_play
+  rogo_build
+  execute File.conventional_filepath(exe_filepath) + " play"
+endRoutine
+
+routine rogo_solve
+  rogo_build
+  execute File.conventional_filepath(exe_filepath) + " solve"
+endRoutine
+
 routine rogo_run
   execute File.conventional_filepath(exe_filepath)
 endRoutine
